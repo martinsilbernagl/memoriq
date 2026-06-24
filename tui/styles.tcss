@@ -1,0 +1,343 @@
+/* Memoriq TUI Dashboard Styles - Enhanced */
+
+Screen {
+    background: $surface-darken-1;
+}
+
+/* Header with gradient effect */
+Header {
+    height: 3;
+    background: $primary-darken-2;
+    color: $text;
+    text-style: bold;
+}
+
+Header.-tall {
+    height: 3;
+}
+
+/* Main container */
+#main-container {
+    height: 1fr;
+}
+
+/* Command Palette */
+#command-palette {
+    dock: top;
+    height: auto;
+    background: $surface;
+    border-bottom: solid $primary;
+    padding: 0 1;
+}
+
+#command-palette.hidden {
+    display: none;
+}
+
+#palette-input {
+    height: 3;
+    border: none;
+    background: $surface-darken-1;
+    padding: 0 2;
+}
+
+#palette-input:focus {
+    border: solid $accent;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+ContentSwitcher {
+    height: 1fr;
+}
+
+TabPane {
+    height: 1fr;
+    padding: 0;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+DataTable > .datatable--header {
+    background: $primary-background;
+    color: $text;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent;
+}
+
+Tree {
+    height: 1fr;
+}
+
+#footer-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+Select {
+    margin-left: 1;
+}
+
+/* Update confirmation dialog */
+ConfirmUpdateScreen {
+    align: center middle;
+    background: $surface-darken-1;
+}
+
+ConfirmUpdateScreen #dialog {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    border: solid $primary;
+    background: $surface;
+}
+
+ConfirmUpdateScreen #buttons {
+    margin-top: 1;
+    height: auto;
+}
+
+ConfirmUpdateScreen Button {
+    margin-right: 1;
+}
+
+/* Notification Styles */
+NotificationContainer {
+    dock: top;
+    width: 100%;
+    height: auto;
+    content-align: right top;
+    padding: 0 1;
+}
+
+Notification {
+    width: auto;
+    max-width: 50;
+    height: auto;
+    padding: 1 2;
+    margin: 1 0;
+    border: solid;
+    color: $text;
+    text-style: bold;
+}
+
+Notification.info {
+    background: $primary-darken-2;
+    border: solid $primary;
+}
+
+Notification.success {
+    background: $success-darken-2;
+    border: solid $success;
+}
+
+Notification.warning {
+    background: $warning-darken-2;
+    border: solid $warning;
+}
+
+Notification.error {
+    background: $error-darken-2;
+    border: solid $error;
+}
+
+/* Tab improvements */
+TabbedContent {
+    height: 1fr;
+    background: $surface-darken-1;
+}
+
+TabbedContent:focus {
+    background: $surface;
+}
+
+ContentSwitcher {
+    height: 1fr;
+}
+
+Tabs {
+    background: $primary-darken-3;
+    padding: 0 1;
+}
+
+Tab {
+    padding: 0 2;
+    height: 3;
+}
+
+Tab:hover {
+    background: $primary-darken-1;
+}
+
+Tab.-active {
+    background: $primary;
+    text-style: bold;
+}
+
+/* TabPane content area */
+TabPane {
+    height: 1fr;
+    padding: 1;
+    background: $surface-darken-1;
+}
+
+/* Footer improvements */
+Footer {
+    background: $primary-darken-3;
+    color: $text-muted;
+    height: 1;
+}
+
+Footer Key {
+    color: $text;
+    background: $primary-darken-1;
+}
+
+/* DataTable improvements */
+DataTable {
+    height: 1fr;
+    border: solid $surface-darken-2;
+}
+
+DataTable > .datatable--header {
+    background: $primary-darken-2;
+    color: $text;
+    text-style: bold;
+    height: 3;
+}
+
+DataTable > .datatable--row {
+    height: 2;
+}
+
+DataTable > .datatable--row-even {
+    background: $surface-darken-2;
+}
+
+DataTable > .datatable--row-odd {
+    background: $surface-darken-1;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent;
+}
+
+DataTable > .datatable--hover {
+    background: $primary-darken-3;
+}
+
+/* SettingsTab improvements */
+SettingsTab {
+    padding: 2;
+}
+
+SettingsTab .setting-row {
+    height: auto;
+    margin: 1 0;
+    padding: 1;
+    background: $surface;
+    border: solid $surface-darken-2;
+}
+
+SettingsTab .setting-label {
+    width: 30;
+    content-align: left middle;
+}
+
+SettingsTab .button-row {
+    height: auto;
+    margin-top: 2;
+    padding: 1;
+}
+
+SettingsTab .header {
+    text-style: bold;
+    text-align: center;
+    margin-bottom: 1;
+    padding: 1;
+    background: $primary-darken-2;
+}
+
+SettingsTab .section-header {
+    text-style: bold;
+    margin-top: 2;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+/* Switch and Select styling */
+Switch {
+    background: $surface;
+}
+
+Switch:focus {
+    border: solid $accent;
+}
+
+Select {
+    margin-left: 1;
+    background: $surface;
+}
+
+Select:focus {
+    border: solid $accent;
+}
+
+/* Button improvements */
+Button {
+    margin: 0 1;
+}
+
+Button:focus {
+    text-style: bold;
+}
+
+/* Tree widget improvements */
+Tree {
+    height: 1fr;
+    background: $surface;
+    border: solid $surface-darken-2;
+    padding: 1;
+}
+
+Tree:focus {
+    border: solid $accent;
+}
+
+/* Scrollbar improvements */
+Scrollbar {
+    background: $surface-darken-2;
+}
+
+Scrollbar > .scrollbar--thumb {
+    background: $primary-darken-1;
+}
+
+Scrollbar > .scrollbar--thumb:hover {
+    background: $primary;
+}
+
+/* Static text improvements */
+Static {
+    padding: 0 1;
+}
+
+/* Progress bar for health (if used) */
+.progress-bar {
+    height: 1;
+    background: $surface-darken-2;
+}
+
+.progress-bar-fill {
+    background: $success;
+}

@@ -1,0 +1,457 @@
+"""Search helpers for Memoriq — FTS5 + vector hybrid search (Phase 2).
+
+Performance optimized with query caching, PRAGMA hints, and covering indexes.
+"""
+
+import concurrent.futures
+import logging
+import sqlite3
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from db import ensure_vec
+
+_log = logging.getLogger("memoriq.search.fts_search")
+
+# Singleton executor for embed_text calls (timeout protection, reused across searches).
+# NOTE: On timeout, the embed task keeps running in the worker thread — Python's
+# concurrent.futures cannot cancel running tasks. If embedding consistently exceeds
+# the 10s timeout, tasks queue up. In practice this never happens (embedding takes <2s)
+# and MCP requests are serial, so at most 1 task is queued.
+_embed_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+
+# --- Helpers ---
+
+def _vec_tables_exist(db: sqlite3.Connection) -> bool:
+    """Check if vector tables exist in the database."""
+    try:
+        db.execute("SELECT COUNT(*) FROM facts_vec")
+        return True
+    except Exception:
+        return False
+
+
+def _is_trivial_query(query: str) -> bool:
+    """Check if query is too short/generic to benefit from vector search."""
+    stripped = query.strip().strip('"').strip("'").strip("*")
+    return len(stripped) < 3
+
+
+import re
+
+def _escape_fts5(query: str) -> str:
+    """Escape a query string for safe FTS5 MATCH use.
+
+    Removes FTS5 special characters and wraps in double quotes to treat as phrase.
+    This prevents query manipulation via FTS5 operators (OR, AND, NOT, NEAR, etc.)
+    """
+    # Remove FTS5 special characters: * ^ $ - ( ) OR AND NOT NEAR
+    # Keep only alphanumeric, whitespace, and common punctuation
+    cleaned = re.sub(r'[^\w\s.,;:!?@#%&+=\/\\-]', '', query)
+    # Collapse multiple spaces
+    cleaned = ' '.join(cleaned.split())
+    # Escape double quotes (defense in depth)
+    escaped = cleaned.replace('"', '""')
+    return f'"{escaped}"'
+
+
+def _fact_row_to_dict(row) -> dict:
+    """Convert a facts row to dict using column names."""
+    d = {
+        "id": row["id"], "project": row["project"], "content": row["content"],
+        "type": row["type"], "domain": row["domain"], "tags": row["tags"],
+        "timestamp": row["timestamp"], "heat_score": row["heat_score"],
+        "source_file": row["source_file"], "source_mtime": row["source_mtime"],
+        "session_id": row["session_id"], "rowid": row["rowid"],
+    }
+    # V3 columns — graceful fallback for pre-migration DBs
+    try:
+        d["retrieval_count"] = row["retrieval_count"] or 0
+        d["last_retrieved"] = row["last_retrieved"]
+    except (IndexError, KeyError):
+        d["retrieval_count"] = 0
+        d["last_retrieved"] = None
+    # V3 Tier 2 columns
+    try:
+        d["knowledge_tier"] = row["knowledge_tier"] or "active"
+        d["cluster_id"] = row["cluster_id"]
+    except (IndexError, KeyError):
+        d["knowledge_tier"] = "active"
+        d["cluster_id"] = None
+    return d
+
+
+def _chunk_row_to_dict(row) -> dict:
+    """Convert a file_chunks row to dict using column names.
+
+    Note: file_chunks.id IS the rowid (INTEGER PRIMARY KEY AUTOINCREMENT),
+    so we alias it as row_id in SELECT to avoid duplicate column names.
+    """
+    return {
+        "id": row["id"], "project": row["project"], "file_path": row["file_path"],
+        "section_title": row["section_title"], "chunk_index": row["chunk_index"],
+        "content": row["content"], "file_mtime": row["file_mtime"],
+        "rowid": row["row_id"],
+    }
+
+
+# --- Vector search ---
+
+def _vec_search_facts(db: sqlite3.Connection, query_embedding: bytes,
+                      project: str = None, fact_type: str = None,
+                      scope: str = "project", limit: int = 20,
+                      tags: str = None) -> dict[int, float]:
+    """Vector similarity search on facts. Returns {rowid: distance}."""
+    rows = db.execute("""
+        SELECT rowid, distance
+        FROM facts_vec
+        WHERE embedding MATCH ? AND k = ?
+    """, (query_embedding, limit * 3)).fetchall()
+
+    results = {}
+    for row in rows:
+        rowid, distance = row[0], row[1]
+        fact = db.execute("SELECT project, type, tags FROM facts WHERE rowid = ?", (rowid,)).fetchone()
+        if not fact:
+            continue
+        if scope == "project" and project and fact["project"] != project:
+            continue
+        if scope != "all" and scope != "project" and fact["project"] != scope:
+            continue
+        if fact_type and fact["type"] != fact_type:
+            continue
+        if tags and fact["tags"]:
+            fact_tags_str = fact["tags"]
+            if not all(t.strip() in fact_tags_str for t in tags.split(",")):
+                continue
+        elif tags and not fact["tags"]:
+            continue
+        results[rowid] = distance
+
+    return results
+
+
+def _vec_search_chunks(db: sqlite3.Connection, query_embedding: bytes,
+                       project: str = None, file_filter: str = None,
+                       limit: int = 20) -> dict[int, float]:
+    """Vector similarity search on chunks. Returns {rowid: distance}."""
+    rows = db.execute("""
+        SELECT rowid, distance
+        FROM chunks_vec
+        WHERE embedding MATCH ? AND k = ?
+    """, (query_embedding, limit * 3)).fetchall()
+
+    results = {}
+    for row in rows:
+        rowid, distance = row[0], row[1]
+        chunk = db.execute(
+            "SELECT project, file_path FROM file_chunks WHERE rowid = ?", (rowid,)
+        ).fetchone()
+        if not chunk:
+            continue
+        if project and chunk["project"] != project:
+            continue
+        if file_filter:
+            pattern = file_filter.replace("*", "")
+            if pattern not in chunk["file_path"]:
+                continue
+        results[rowid] = distance
+
+    return results
+
+
+# --- Hybrid ranking ---
+
+def _hybrid_rank(fts_results: list[dict], vec_distances: dict[int, float],
+                 fts_weight: float = 0.4, vec_weight: float = 0.6) -> list[dict]:
+    """Combine FTS5 and vector results with weighted ranking.
+
+    FTS5 rank: position-based (1st result = 1.0, last = 0.0)
+    Vector distance: converted to similarity (lower distance = higher score)
+
+    Note: vec-only results must be pre-fetched and added to fts_results
+    before calling this function.
+    """
+    fts_scores = {}
+    vec_scores = {}
+
+    # FTS5 scores: position-based
+    for i, result in enumerate(fts_results):
+        rowid = result["rowid"]
+        fts_scores[rowid] = 1.0 - (i / max(len(fts_results), 1))
+
+    # Vector scores: distance -> similarity (0-1)
+    if vec_distances:
+        max_dist = max(vec_distances.values()) if vec_distances else 1.0
+        for rowid, distance in vec_distances.items():
+            vec_scores[rowid] = 1.0 - (distance / max(max_dist * 1.2, 0.001))
+
+    # Score all results (both FTS and vec-only are already in fts_results)
+    for result in fts_results:
+        rowid = result["rowid"]
+        fts_s = fts_scores.get(rowid, 0.0)
+        vec_s = vec_scores.get(rowid, 0.0)
+        result["_hybrid_score"] = (fts_weight * fts_s) + (vec_weight * vec_s)
+
+    fts_results.sort(key=lambda x: x["_hybrid_score"], reverse=True)
+    return fts_results
+
+
+# --- Facts search ---
+
+_FACTS_COLUMNS = "id, project, content, type, domain, tags, timestamp, heat_score, source_file, source_mtime, session_id, rowid, retrieval_count, last_retrieved, knowledge_tier, cluster_id"
+
+
+def fts_search_facts(db: sqlite3.Connection, query: str, project: str = None,
+                     fact_type: str = None, tags: str = None, limit: int = 5,
+                     scope: str = "project") -> list[dict]:
+    """Search facts using FTS5 + optional vector hybrid search.
+
+    Performance features:
+    - Query result caching (LRU with TTL)
+    - PRAGMA optimize hints for FTS5
+    - Covering index utilization
+    - Batch embedding generation
+    """
+    import logging, time as _t
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt
+
+    # Performance: Check cache first
+    from db import get_cached_result, set_cached_result
+    cache_key_params = (query, project, fact_type, tags, limit, scope)
+    cached = get_cached_result("fts_search_facts", cache_key_params)
+    if cached is not None:
+        return cached
+
+    _log = logging.getLogger("memoriq.fts_search")
+    _t0 = _t.time()
+    _tf = _Path(__file__).parent.parent.parent / "logs" / "trace.log"
+    def _tr(step):
+        msg = f"[{_t.time() - _t0:.3f}s] fts_search: {step}"
+        _log.info("TRACE %s", msg)
+        try:
+            with open(_tf, "a", encoding="utf-8") as f:
+                f.write(f"{_dt.now().isoformat()} {msg}\n")
+        except Exception:
+            pass
+
+    _tr(f"START query='{query[:30]}' project={project}")
+
+    # Performance: Run PRAGMA optimize periodically (every 1000 calls)
+    # This helps FTS5 maintain optimal query performance
+    import random
+    if random.random() < 0.001:  # 0.1% chance per call
+        try:
+            db.execute("PRAGMA optimize")
+            _tr("PRAGMA optimize executed")
+        except Exception:
+            pass
+
+    conditions = []
+    params = []
+
+    if scope == "project" and project:
+        conditions.append("project = ?")
+        params.append(project)
+    elif scope != "all" and scope != "project":
+        conditions.append("project = ?")
+        params.append(scope)
+
+    if fact_type:
+        conditions.append("type = ?")
+        params.append(fact_type)
+
+    if tags:
+        for tag in tags.split(","):
+            tag = tag.strip()
+            if tag:
+                conditions.append("tags LIKE ?")
+                params.append(f"%{tag}%")
+
+    # Wildcard/trivial query — return hottest/newest facts without FTS5
+    if _is_trivial_query(query):
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT {_FACTS_COLUMNS}
+            FROM facts
+            {where}
+            ORDER BY heat_score DESC, timestamp DESC
+            LIMIT ?
+        """
+        rows = db.execute(sql, params + [limit]).fetchall()
+        return [_fact_row_to_dict(row) for row in rows]
+
+    # FTS5 search
+    fts_query = _escape_fts5(query)
+    fts_where = f"AND {' AND '.join(['f.' + c for c in conditions])}" if conditions else ""
+
+    _tr("START ensure_vec")
+    vec_ready = ensure_vec(db) and _vec_tables_exist(db)
+    _tr(f"ensure_vec done, vec_ready={vec_ready}")
+    fetch_limit = limit * 3 if vec_ready else limit
+
+    _tr("START FTS5 query")
+    sql = f"""
+        SELECT f.{_FACTS_COLUMNS.replace(', ', ', f.')}
+        FROM facts f
+        JOIN facts_fts fts ON f.rowid = fts.rowid
+        WHERE facts_fts MATCH ? {fts_where}
+        ORDER BY rank
+        LIMIT ?
+    """
+    fts_params = [fts_query] + params + [fetch_limit]
+
+    try:
+        rows = db.execute(sql, fts_params).fetchall()
+        _tr(f"FTS5 query done, {len(rows)} rows")
+    except sqlite3.OperationalError:
+        # Fallback: LIKE search if FTS5 query syntax fails
+        where_parts = list(conditions) + ["content LIKE ?"]
+        where = "WHERE " + " AND ".join(where_parts)
+        sql = f"""
+            SELECT {_FACTS_COLUMNS}
+            FROM facts
+            {where}
+            ORDER BY heat_score DESC
+            LIMIT ?
+        """
+        fts_params = params + [f"%{query}%"] + [fetch_limit]
+        rows = db.execute(sql, fts_params).fetchall()
+
+    fts_results = [_fact_row_to_dict(row) for row in rows]
+
+    # Hybrid search: combine with vector results if available
+    # Note: embed model is pre-loaded at MCP server startup (before stdio pipes)
+    if vec_ready:
+        _tr("START hybrid/vector search (vec_ready=True)")
+        try:
+            from embedder import embed_text
+            future = _embed_executor.submit(embed_text, query)
+            try:
+                query_embedding = future.result(timeout=10)
+            except concurrent.futures.TimeoutError:
+                _log.warning("embed_text timeout (10s) for query '%s' — falling back to FTS5 only", query[:50])
+                _tr("embed_text TIMEOUT (10s), falling back to FTS5 only")
+                return fts_results[:limit]
+            _tr("embed_text done")
+            vec_distances = _vec_search_facts(db, query_embedding, project, fact_type, scope, limit, tags=tags)
+            if vec_distances:
+                fts_rowids = {r["rowid"] for r in fts_results}
+                for rowid in vec_distances:
+                    if rowid not in fts_rowids:
+                        row = db.execute(f"""
+                            SELECT {_FACTS_COLUMNS} FROM facts WHERE rowid = ?
+                        """, (rowid,)).fetchone()
+                        if row:
+                            fts_results.append(_fact_row_to_dict(row))
+                fts_results = _hybrid_rank(fts_results, vec_distances)
+            _tr(f"hybrid search done, {len(fts_results)} total results")
+        except Exception as e:
+            _tr(f"vector search failed: {e}")
+            import sys
+            print(f"[Memoriq] Vector search failed, using FTS5 only: {e}", file=sys.stderr)
+
+    result = fts_results[:limit]
+
+    # Cache the result before returning
+    set_cached_result("fts_search_facts", cache_key_params, result, ttl=60.0)
+
+    return result
+
+
+# --- Chunks search ---
+
+_CHUNKS_COLUMNS = "id, project, file_path, section_title, chunk_index, content, file_mtime, id AS row_id"
+
+
+def fts_search_chunks(db: sqlite3.Connection, query: str, project: str = None,
+                      file_filter: str = None, limit: int = 5) -> list[dict]:
+    """Search file chunks using FTS5 + optional vector hybrid search."""
+    conditions = []
+    params = []
+
+    if project:
+        conditions.append("project = ?")
+        params.append(project)
+
+    if file_filter:
+        conditions.append("file_path LIKE ?")
+        params.append(f"%{file_filter.replace('*', '%')}%")
+
+    # Trivial query — return recent chunks
+    if _is_trivial_query(query):
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT {_CHUNKS_COLUMNS}
+            FROM file_chunks
+            {where}
+            ORDER BY id DESC
+            LIMIT ?
+        """
+        rows = db.execute(sql, params + [limit]).fetchall()
+        return [_chunk_row_to_dict(row) for row in rows]
+
+    # FTS5 search
+    fts_query = _escape_fts5(query)
+    fts_where = f"AND {' AND '.join(['fc.' + c for c in conditions])}" if conditions else ""
+
+    vec_ready = ensure_vec(db) and _vec_tables_exist(db)
+    fetch_limit = limit * 3 if vec_ready else limit
+
+    sql = f"""
+        SELECT fc.{_CHUNKS_COLUMNS.replace(', ', ', fc.')}
+        FROM file_chunks fc
+        JOIN chunks_fts cfts ON fc.rowid = cfts.rowid
+        WHERE chunks_fts MATCH ? {fts_where}
+        ORDER BY rank
+        LIMIT ?
+    """
+    fts_params = [fts_query] + params + [fetch_limit]
+
+    try:
+        rows = db.execute(sql, fts_params).fetchall()
+    except sqlite3.OperationalError:
+        # Fallback: LIKE search
+        where_parts = list(conditions) + ["content LIKE ?"]
+        where = "WHERE " + " AND ".join(where_parts)
+        sql = f"""
+            SELECT {_CHUNKS_COLUMNS}
+            FROM file_chunks
+            {where}
+            ORDER BY id DESC
+            LIMIT ?
+        """
+        fts_params = params + [f"%{query}%"] + [fetch_limit]
+        rows = db.execute(sql, fts_params).fetchall()
+
+    fts_results = [_chunk_row_to_dict(row) for row in rows]
+
+    # Hybrid search
+    if vec_ready:
+        try:
+            from embedder import embed_text
+            future = _embed_executor.submit(embed_text, query)
+            try:
+                query_embedding = future.result(timeout=10)
+            except concurrent.futures.TimeoutError:
+                _log.warning("embed_text timeout (10s) for chunk query '%s' — falling back to FTS5 only", query[:50])
+                return fts_results[:limit]
+            vec_distances = _vec_search_chunks(db, query_embedding, project, file_filter, limit)
+            if vec_distances:
+                fts_rowids = {r["rowid"] for r in fts_results}
+                for rowid in vec_distances:
+                    if rowid not in fts_rowids:
+                        row = db.execute(f"""
+                            SELECT {_CHUNKS_COLUMNS} FROM file_chunks WHERE rowid = ?
+                        """, (rowid,)).fetchone()
+                        if row:
+                            fts_results.append(_chunk_row_to_dict(row))
+                fts_results = _hybrid_rank(fts_results, vec_distances)
+        except Exception as e:
+            import sys
+            print(f"[Memoriq] Vector search failed, using FTS5 only: {e}", file=sys.stderr)
+
+    return fts_results[:limit]

@@ -1,0 +1,31 @@
+[project]
+name = "memoriq"
+version = "5.0.0"
+description = "Persistent memory + code intelligence + subagent protocol for Claude Code & Codex CLI — save 80-200K+ tokens/session. 18 MCP tools, hybrid search, subagent context compression, TUI dashboard, crash recovery."
+readme = "README.md"
+license = "Elastic-2.0"
+requires-python = ">=3.11"
+authors = []
+keywords = ["claude", "claude-code", "codex-cli", "mcp", "memory", "ai", "llm", "persistent-memory", "vibecoding", "tui", "subagent", "code-intelligence", "context-compression"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/LakyFx/Memoriq"
+Repository = "https://github.com/LakyFx/Memoriq"
+Issues = "https://github.com/LakyFx/Memoriq/issues"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools]
+packages = ["mcp-server", "hooks", "commands"]

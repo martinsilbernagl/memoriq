@@ -1,0 +1,127 @@
+# ~/.memoriq/config.yaml
+# Memoriq v4 — Knowledge layer + code intelligence for AI coding agents
+
+# General
+version: "4.2.0"
+language: "en"  # "en" or "cs"
+
+# Paths (auto-detected)
+paths:
+  home: "~/.memoriq"
+  db: "~/.memoriq/memory.db"
+  log: "~/.memoriq/logs/memoriq.log"
+
+# File Indexer
+indexer:
+  scan_depth: 3
+  chunk_max_chars: 2000
+  chunk_overlap_chars: 200
+  doc_extensions:
+    - ".md"
+    - ".txt"
+    - ".json"
+    - ".yaml"
+    - ".yml"
+    - ".toml"
+  code_extensions:
+    - ".ts"
+    - ".tsx"
+    - ".js"
+    - ".jsx"
+    - ".py"
+    - ".php"
+    - ".css"
+    - ".html"
+  doc_max_file_size: 200000
+  code_max_file_size: 50000
+  ignore_dirs:
+    - "node_modules"
+    - ".git"
+    - "__pycache__"
+    - ".next"
+    - "dist"
+    - "build"
+    - "venv"
+    - ".venv"
+  ignore_files:
+    - "package-lock.json"
+    - "yarn.lock"
+    - "pnpm-lock.yaml"
+
+# Search (FTS5 + optional vector via fastembed/sqlite-vec)
+search:
+  default_limit: 5
+  max_limit: 10
+
+# Project DNA
+dna:
+  max_tokens: 150
+  template: |
+    ## Project DNA: {name}
+    Stack: {stack}
+    Style: {style}
+    Structure: {structure}
+    Deploy: {deploy}
+    Active: {active}
+    Patterns: {patterns}
+    Last: {last}
+
+# Session
+session:
+  bridge_max_tokens: 150
+
+# Projects — set to your projects directory
+projects:
+  base_path: "~/projects"
+
+# Updates
+updates:
+  check_on_startup: true  # Check for updates when TUI starts
+  auto_install: false     # If true, install updates automatically without asking
+  channel: "stable"       # stable | beta | dev
+
+# Logging
+logging:
+  level: "INFO"
+  max_size_mb: 10
+
+# Integrations Platform
+integrations:
+  # Webhook notifications - async HTTP POST on memory events
+  webhooks:
+    enabled: false
+    endpoints:
+      # Example: Slack notification
+      # - url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      #   events: ["memory_write", "session_end"]
+      #   headers:
+      #     Content-Type: "application/json"
+      #   timeout: 5
+      #   retries: 3
+      # Example: Local development server
+      # - url: "http://localhost:3000/memoriq-webhook"
+      #   events: ["*"]  # all events
+      #   timeout: 5
+
+  # Obsidian export - export facts as markdown notes
+  obsidian:
+    enabled: false
+    vault_path: "~/Obsidian/Memoriq"
+    auto_export: true  # export on every memory_write
+    export_on_demand: true  # allow manual export via CLI
+    link_format: "wiki"  # "wiki" for [[links]], "markdown" for [text](path)
+    frontmatter:
+      - id
+      - type
+      - project
+      - tags
+      - created
+
+  # Git hooks - show relevant facts before commit
+  git:
+    enabled: false
+    suggest_facts_on_commit: true
+    auto_tag_commits: false
+    pre_commit:
+      check_stale_facts: true  # warn if committing files with stale memory
+      suggest_related: true    # suggest facts related to changed files

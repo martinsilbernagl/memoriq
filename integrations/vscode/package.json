@@ -1,0 +1,137 @@
+{
+  "name": "memoriq",
+  "displayName": "Memoriq",
+  "description": "Persistent memory and code intelligence for AI coding agents",
+  "version": "1.0.0",
+  "publisher": "memoriq",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Snippets",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "memory",
+    "code intelligence",
+    "claude",
+    "codex"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "memoriq.search",
+        "title": "Search Memory",
+        "category": "Memoriq"
+      },
+      {
+        "command": "memoriq.write",
+        "title": "Write Fact",
+        "category": "Memoriq"
+      },
+      {
+        "command": "memoriq.context",
+        "title": "Show Context",
+        "category": "Memoriq"
+      },
+      {
+        "command": "memoriq.index",
+        "title": "Index Project",
+        "category": "Memoriq"
+      },
+      {
+        "command": "memoriq.browse",
+        "title": "Browse Facts",
+        "category": "Memoriq"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "memoriq.search",
+          "when": "memoriq:enabled"
+        },
+        {
+          "command": "memoriq.write",
+          "when": "memoriq:enabled"
+        },
+        {
+          "command": "memoriq.context",
+          "when": "memoriq:enabled"
+        },
+        {
+          "command": "memoriq.index",
+          "when": "memoriq:enabled"
+        },
+        {
+          "command": "memoriq.browse",
+          "when": "memoriq:enabled"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "memoriq.facts",
+          "name": "Memoriq Facts",
+          "when": "memoriq:enabled"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Memoriq",
+      "properties": {
+        "memoriq.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Memoriq integration"
+        },
+        "memoriq.serverPath": {
+          "type": "string",
+          "default": "~/.memoriq/mcp-server/server.py",
+          "description": "Path to Memoriq MCP server"
+        },
+        "memoriq.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable path"
+        },
+        "memoriq.showInlineHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline memory hints"
+        },
+        "memoriq.autoIndex": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-index project on open"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0"
+  }
+}

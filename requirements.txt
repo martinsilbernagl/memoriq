@@ -1,0 +1,7 @@
+mcp
+pyyaml
+textual
+fastembed
+sqlite-vec
+tree-sitter-language-pack==0.13.0
+tree-sitter==0.25.2

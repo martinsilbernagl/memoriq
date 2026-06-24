@@ -1,0 +1,16 @@
+#!/bin/bash
+# Memoriq MCP Server Wrapper
+# Runs the MCP server using the virtual environment Python
+
+MEMORIQ_HOME="$HOME/.memoriq"
+VENV_PATH="$MEMORIQ_HOME/venv"
+SERVER_PATH="$MEMORIQ_HOME/mcp-server/server.py"
+
+if [ ! -d "$VENV_PATH" ]; then
+    echo "[Memoriq] ERROR: Virtual environment not found." >&2
+    echo "[Memoriq] Run: bash $MEMORIQ_HOME/bin/setup-venv.sh" >&2
+    exit 1
+fi
+
+exec "$VENV_PATH/bin/python" "$SERVER_PATH" "$@"
+

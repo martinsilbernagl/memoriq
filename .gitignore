@@ -1,0 +1,53 @@
+# Memoriq runtime data
+memory.db
+memory.db-wal
+memory.db-shm
+active_session.json
+mcp-stderr.log
+
+# Logs
+logs/
+*.log
+
+# Cache
+cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+CLAUDE.md
+AGENTS.md
+
+# Promotional content
+reddit-*.txt
+
+# Local git hook (auto-deploy, dev-only)
+hooks/git-post-commit
+
+# PRD (internal docs, not for public)
+memoriq-prd*.md
+Screenshots/
