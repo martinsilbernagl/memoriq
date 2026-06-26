@@ -186,7 +186,7 @@ if [ ! -d "$MEMORIQ_HOME/.git" ]; then
     echo "[memoriq] Initializing update repository..."
     cd "$MEMORIQ_HOME"
     git init --quiet 2>/dev/null
-    git remote add origin ssh://tajny.domapp.tech:2222/domess/Memoriq.git 2>/dev/null || true
+    git remote add origin https://github.com/martinsilbernagl/memoriq.git 2>/dev/null || true
     git fetch origin main --quiet 2>/dev/null || echo "[memoriq] Note: Could not fetch updates (ssh key may be needed)"
 fi
 

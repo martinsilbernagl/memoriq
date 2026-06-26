@@ -10,7 +10,6 @@ All notable changes to Memoriq will be documented in this file.
 
 - docs: Add troubleshooting guide
   - Commit: 7fffb32
-  - Author: DomeSs
 
 
 ## [5.0.2] - 2026-03-11
@@ -19,7 +18,6 @@ All notable changes to Memoriq will be documented in this file.
 
 - feat(errors): Add centralized error handling
   - Commit: 28c82d4
-  - Author: DomeSs
 
 
 ## [5.0.1] - 2026-03-11
@@ -28,7 +26,6 @@ All notable changes to Memoriq will be documented in this file.
 
 - test: přidán post-commit hook pro auto-verzování
   - Commit: a3d421b
-  - Author: DomeSs
 
 
 ### 🚀 Major Release - Memoriq v5

@@ -210,8 +210,8 @@ Next session starts with full context - no re-reading, no re-explaining
 ### 1. Install (30 seconds)
 
 ```bash
-git clone https://github.com/LakyFx/Memoriq.git
-cd Memoriq
+git clone https://github.com/martinsilbernagl/memoriq.git
+cd memoriq
 python install.py
 ```
 

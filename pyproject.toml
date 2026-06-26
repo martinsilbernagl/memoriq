@@ -19,9 +19,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/LakyFx/Memoriq"
-Repository = "https://github.com/LakyFx/Memoriq"
-Issues = "https://github.com/LakyFx/Memoriq/issues"
+Homepage = "https://github.com/martinsilbernagl/memoriq"
+Repository = "https://github.com/martinsilbernagl/memoriq"
+Issues = "https://github.com/martinsilbernagl/memoriq/issues"
 
 [build-system]
 requires = ["setuptools>=68.0"]
